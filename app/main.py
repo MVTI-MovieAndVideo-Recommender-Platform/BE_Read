@@ -1,8 +1,7 @@
-import datetime
-import json
-from typing import List
+import re
+from datetime import datetime
+from typing import List, Optional
 
-from bson import json_util
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exception_handlers import (
     http_exception_handler,
@@ -50,7 +49,7 @@ collection = db.media
 class MovieResponse(BaseModel):
     id: int = None
     title: str = None
-    release_date: datetime.datetime = None
+    release_date: datetime = None
     runtime: int = None
     certification: str = None
     genre: List[str] = None
@@ -67,41 +66,147 @@ class MovieResponse(BaseModel):
     backdropurls: List[str] = None
 
 
-@app.post("/content/", response_model=MovieResponse)
-async def create_content(content: MovieResponse):
-    result = await collection.insert_one(content.dict())
-    if result.inserted_id:
-        content_data = await collection.find_one({"_id": result.inserted_id})
-        return content_data
-    raise HTTPException(status_code=400, detail="Content could not be created")
-
-
-@app.get("/content/", response_model=List[MovieResponse])
-async def get_all_contents():
-    contents = await collection.find().to_list(length=100)
-    return contents
-
-
-def convert_to_json(data):
-    return json.loads(json_util.dumps(data))
-
-
-def normalize_string(s):
+def normalize_string(s: Optional[str]) -> str:
     return s.replace(" ", "")
 
 
-@app.get("/search/genre")
-async def get_movie_by_genre(
-    genres: List[str] = Query(...), contentype: int = 0, page: int = 1, page_size: int = 100
+def search_titles(term: List[str], and_or: Optional[str]) -> dict:
+    return {
+        and_or: [
+            {"title": {"$regex": ".*".join(normalize_string(title)), "$options": "i"}}
+            for title in term
+        ]
+    }
+
+
+def search_genres(term: List[str], and_or: Optional[str]) -> dict:
+    return {and_or: [{"genre": {"$regex": genre, "$options": "i"}} for genre in term]}
+
+
+def search_overviews(term: List[str], and_or: Optional[str]) -> dict:
+    return {and_or: [{"overview": {"$regex": keyword, "$options": "i"}} for keyword in term]}
+
+
+def search_directors(term: List[str], and_or: Optional[str]) -> dict:
+    directors = [i.replace(" ", "") for i in term]
+    regex_pattern = [f".*{''.join(f'(?=.*{char})' for char in i)}.*" for i in directors]
+    return {
+        and_or: [
+            {"director": {"$elemMatch": {"$regex": regex, "$options": "i"}}}
+            for regex in regex_pattern
+        ]
+    }
+
+
+def search_actors(term: List[str], and_or: Optional[str]) -> dict:
+    actors = [i.replace(" ", "") for i in term]
+    regex_pattern = [f".*{''.join(f'(?=.*{char})' for char in i)}.*" for i in actors]
+    return {
+        and_or: [
+            {"actor": {"$elemMatch": {"$regex": regex, "$options": "i"}}} for regex in regex_pattern
+        ]
+    }
+
+
+def search_countrys(term: List[str], and_or: Optional[str]) -> dict:
+    return {and_or: [{"origin_country": {"$regex": country, "$options": "i"}} for country in term]}
+
+
+def search_platforms(term: List[str], and_or: Optional[str]) -> dict:
+    return {and_or: [{"platform": {"$regex": platform, "$options": "i"}} for platform in term]}
+
+
+def parse_date(date_str: Optional[str]) -> datetime:
+    return datetime.strptime(date_str, "%Y-%m-%d")
+
+
+def search_periods(start: Optional[str], end: Optional[str]) -> dict:
+    # 날짜 범위 설정
+    start_date_obj = parse_date(start) if start else datetime(1990, 1, 1)
+    end_date_obj = parse_date(end) if end else datetime.today()
+
+    return {"release_date": {"$gte": start_date_obj, "$lte": end_date_obj}}
+
+
+@app.get("/search")
+async def get_search(
+    anything: List[str] = Query(None),
+    titles: List[str] = Query(None),
+    genres: List[str] = Query(None),
+    keywords: List[str] = Query(None),
+    directors: List[str] = Query(None),
+    actors: List[str] = Query(None),
+    platforms: List[str] = Query(None),
+    countries: List[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    isfilter: bool = False,
+    contentype: int = 0,
+    page: int = 1,
+    page_size: int = 100,
 ):
+    if (
+        not titles
+        and not genres
+        and not keywords
+        and not directors
+        and not actors
+        and not platforms
+        and not countries
+        and not start_date
+        and not end_date
+    ) and not anything:
+        raise HTTPException(status_code=400, detail="No Data!")
     if page < 1:
         raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
-    query = {"$and": [{"genre": {"$regex": genre, "$options": "i"}} for genre in genres]}
-    # 모든 주어진 장르를 포함하는 영화를 찾기 위해 $and를 사용
-    if contentype == 1:  # 영화
-        query["id"] = {"$mod": [2, 1]}  # id가 홀수인 데이터만
-    elif contentype == 2:  # 시리즈
-        query["id"] = {"$mod": [2, 0]}  # id가 홀수인 데이터만
+    if isfilter:
+        query = {"$and": []}
+        if titles:
+            query["$and"].append(search_titles(titles, "$or"))
+        if genres:
+            query["$and"].append(search_genres(genres, "$and"))
+
+        if keywords:
+            query["$and"].append(search_overviews(keywords, "$and"))
+
+        if directors:
+            query["$and"].append(search_directors(directors, "$or"))
+
+        if actors:
+            query["$and"].append(search_actors(actors, "$and"))
+
+        if platforms:
+            query["$and"].append(search_platforms(platforms, "$and"))
+
+        if countries:
+            query["$and"].append(search_countrys(countries, "$or"))
+
+        if start_date or end_date:
+            query["$and"].append(search_periods(start_date, end_date))
+        if not query["$and"]:
+            raise HTTPException(status_code=400, detail="No query to filter!")
+        # mod_value 설정
+        else:
+            if contentype == 1:  # 영화
+                query["$and"].append({"id": {"$mod": [2, 1]}})  # 홀수
+            elif contentype == 2:  # 시리즈
+                query["$and"].append({"id": {"$mod": [2, 0]}})  # 짝수
+
+    else:
+        query = {"$or": []}
+        query["$or"].append(search_titles(anything, "$or"))
+        query["$or"].append(search_genres(anything, "$and"))
+        query["$or"].append(search_overviews(anything, "$and"))
+        query["$or"].append(search_directors(anything, "$or"))
+        query["$or"].append(search_actors(anything, "$and"))
+        if not query["$or"]:
+            raise HTTPException(status_code=400, detail="No query!")
+        # mod_value 설정
+        else:
+            if contentype == 1:  # 영화
+                query["$and"] = [{"id": {"$mod": [2, 1]}}]  # 홀수
+            elif contentype == 2:  # 시리즈
+                query["$and"] = [{"id": {"$mod": [2, 0]}}]  # 짝수
 
     # 전체 문서 수 조회
     total_count = await collection.count_documents(query)
@@ -115,71 +220,10 @@ async def get_movie_by_genre(
         "page": page,
         "page_size": page_size,
         "total_pages": (total_count + page_size - 1) // page_size,
-        "results": await results.to_list(length=None),
-    }
-
-
-# 8-byte 미만의 int로 검색해야함(MongoDB can only handle up to 8-byte ints)
-# 타이틀 검색 API
-@app.get("/search/title")
-async def get_content_by_title(
-    title: str, contentype: int = 0, page: int = 1, page_size: int = 100
-):
-    if page < 1:
-        raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
-
-    regex = ".*".join(normalize_string(title))
-    query = {"title": {"$regex": regex, "$options": "i"}}  # 대소문자 구분 없이 검색
-    # 모든 주어진 장르를 포함하는 영화를 찾기 위해 $and를 사용
-    if contentype == 1:  # 영화
-        query["id"] = {"$mod": [2, 1]}  # id가 홀수인 데이터만
-    elif contentype == 2:  # 시리즈
-        query["id"] = {"$mod": [2, 0]}  # id가 홀수인 데이터만
-
-    # 전체 문서 수 조회
-    total_count = await collection.count_documents(query)
-
-    # 페이지네이션
-    skip = (page - 1) * page_size
-    results = collection.find(query, {"_id": 0}).skip(skip).limit(page_size)
-
-    return {
-        "total_count": total_count,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total_count + page_size - 1) // page_size,
-        "results": await results.to_list(length=None),
-    }
-
-
-@app.get("/search/country")
-async def get_content_by_country(
-    country: str, contentype: int = 0, page: int = 1, page_size: int = 100
-):
-    if page < 1:
-        raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
-    query = {"origin_country": {"$regex": country, "$options": "i"}}  # 대소문자 구분 없이 검색
-
-    # 모든 주어진 장르를 포함하는 영화를 찾기 위해 $and를 사용
-    if contentype == 1:  # 영화
-        query["id"] = {"$mod": [2, 1]}  # id가 홀수인 데이터만
-    elif contentype == 2:  # 시리즈
-        query["id"] = {"$mod": [2, 0]}  # id가 홀수인 데이터만
-
-    total_count = await collection.count_documents(query)
-
-    # 페이지네이션
-    skip = (page - 1) * page_size
-    results = collection.find(query, {"_id": 0}).skip(skip).limit(page_size)
-    return {
-        "total_count": total_count,
-        "page": page,
-        "page_size": page_size,
-        "total_pages": (total_count + page_size - 1) // page_size,
-        "results": await results.to_list(length=None),
+        "results": await results.to_list(length=page_size),
     }
 
 
 @app.get("/")
 def test():
-    return "Hello"
+    return "Hello this is mvti read server"

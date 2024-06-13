@@ -9,7 +9,7 @@ from routes import search_router
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
-app = FastAPI(root_path="/api/info")
+app = FastAPI(root_path="/info")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

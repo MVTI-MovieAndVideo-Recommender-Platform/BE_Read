@@ -52,12 +52,12 @@ jobs:
 
     - name: Delete previous layer versions
       run: |
-        layer_versions=$(aws lambda list-layer-versions --layer-name fastapi-dependencies --query 'LayerVersions[].Version' --output text)
+        layer_versions=$(aws lambda list-layer-versions --layer-name mvti-read-server-dependencies --query 'LayerVersions[].Version' --output text)
         for version in $layer_versions; do
-          aws lambda delete-layer-version --layer-name fastapi-dependencies --version-number $version
+          aws lambda delete-layer-version --layer-name mvti-read-server-dependencies --version-number $version
         done
 
     - name: Deploy dependencies to AWS Lambda layer
       run: |
-        layer_version=$(aws lambda publish-layer-version --layer-name fastapi-dependencies --zip-file fileb://dependencies.zip --compatible-runtimes python3.11 --query 'LayerVersionArn' --output text) && \
-        aws lambda update-function-configuration --function-name mvti-read-server --layers "$layer_version" "arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p311-fastapi:6" "arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p311-pydantic:7"
+        layer_version=$(aws lambda publish-layer-version --layer-name mvti-read-server-dependencies --zip-file fileb://dependencies.zip --compatible-runtimes python3.11 --query 'LayerVersionArn' --output text) && \
+        aws lambda update-function-configuration --function-name mvti-read-server --layers "$layer_version" "arn:aws:lambda:ap-northeast-2:770693421928:layer:Klayers-p311-fastapi:6"

@@ -5,6 +5,10 @@ from typing import List, Optional
 def normalize_string(s: Optional[str]) -> str:
     return s.replace(" ", "")
 
+def search_id(id: int) -> dict:
+    return {
+        {"id":id}
+    }
 
 def search_titles(term: List[str], and_or: Optional[str]) -> dict:
     return {
@@ -44,7 +48,7 @@ def search_actors(term: List[str], and_or: Optional[str]) -> dict:
     }
 
 
-def search_countrys(term: List[str], and_or: Optional[str]) -> dict:
+def search_countries(term: List[str], and_or: Optional[str]) -> dict:
     return {and_or: [{"origin_country": {"$regex": country, "$options": "i"}} for country in term]}
 
 

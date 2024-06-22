@@ -7,7 +7,7 @@ from routes.apihelper import keyword_content
 
 # 상위 20개의 미디어를 추천하는 함수
 async def get_top_media():
-    # 오늘 날짜와 1달 전 날짜 계산
+    # 오늘 날짜와 2달 전 날짜 계산
     today = datetime.now()
     one_month_ago = today - timedelta(days=60)
     pipeline = [

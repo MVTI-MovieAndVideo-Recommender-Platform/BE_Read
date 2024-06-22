@@ -9,7 +9,8 @@ app/routes/__pycache__
 app/routes/api/__pycache__
 app/routes/apihelper/__pycache__
 app/.env
-
+Read_SERVER_LAMBDA.zip
+Read_SERVER_LAMBDA.zip
 
 # gitignore가 작동하지 않을때 대처법
 # git rm -r --cached .

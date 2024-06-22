@@ -17,7 +17,9 @@ async def get_matching_data(user_id: str):
     preference_task = mongo_conn.review.preference.find(
         {"user_id": user_id}, {"media_id": 1}
     ).to_list(length=None)
-    recommend_task = mongo_conn.recommend.recommendation.find({"user_id": user_id})
+    recommend_task = mongo_conn.recommend.recommendation.find({"user_id": user_id}).to_list(
+        length=None
+    )
 
     # 태스크를 개별적으로 실행 및 예외 처리
     user_info, rating_info, preference_info, recommend_info = await asyncio.gather(

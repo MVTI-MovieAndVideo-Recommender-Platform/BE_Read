@@ -1,8 +1,17 @@
-import asyncio
 import base64
 import json
+import os
 import uuid
 from datetime import datetime
+
+from pymongo.errors import CollectionInvalid, PyMongoError, ServerSelectionTimeoutError
+
+with open(
+    f"{os.path.dirname(os.path.abspath(__file__))}/keyword_content_indices.json",
+    "r",
+    encoding="utf-8-sig",
+) as file:
+    keyword_content = json.load(file)
 
 
 def base64_to_uuid(b64_str: str) -> str:
@@ -28,3 +37,16 @@ def model_to_dict(model_instance):
         if isinstance(value, datetime):
             data[key] = value.isoformat()
     return data
+
+
+# 개별 태스크 실행 및 예외 처리 함수
+async def execute_task(task, task_name):
+    try:
+        result = await task
+        return result
+    except (CollectionInvalid, ServerSelectionTimeoutError, PyMongoError) as e:
+        print(f"Error in {task_name}: {str(e)}")
+        return None
+    except Exception as e:
+        print(f"Unexpected error in {task_name}: {str(e)}")
+        return None

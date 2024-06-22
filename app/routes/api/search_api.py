@@ -1,8 +1,5 @@
-from datetime import datetime
-from typing import List, Optional
-
 from database import mongo_conn
-from fastapi import HTTPException, Query, Request
+from fastapi import HTTPException, Request
 from routes.apihelper.search_apihelper import (
     search_actors,
     search_countries,

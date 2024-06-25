@@ -14,8 +14,6 @@ from routes.apihelper.search_apihelper import (
 
 async def get_search(request: Request, page_size: int = 100):
     page = int(request.query_params.get("page", 1))
-    # if int(request.query_params.get("page", 1)) < 1:
-    #     raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
     is_filter = request.query_params.get("isfilter", None)
     terms = (
         request.query_params.getlist("anything") if request.query_params.get("anything") else [""]
@@ -78,3 +76,6 @@ async def get_search(request: Request, page_size: int = 100):
         "total_pages": (total_count + page_size - 1) // page_size,
         "results": await results.to_list(length=page_size),
     }
+
+    # if int(request.query_params.get("page", 1)) < 1:
+    #     raise HTTPException(status_code=400, detail="Page number must be 1 or greater.")
